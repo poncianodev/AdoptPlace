@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import PetCard from '../components/PetCard'
+import { EmptyState, ErrorState, LoadingState } from '../components/CatalogStates'
+import Pagination from '../components/Pagination'
 import { preferredScrollBehavior } from '../utils/scroll'
-import { Pagination } from './Account'
 import { api } from '../services/api'
 
 const states = 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ')
@@ -28,6 +29,7 @@ export default function Catalog() {
   const draft = draftState.key === searchKey ? draftState.values : activeFilters
 
   const [retryCount, setRetryCount] = useState(0)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const requestKey = `${searchKey}:${retryCount}`
   const [result, setResult] = useState({ key: '', data: [], meta: {}, error: '' })
 
@@ -62,7 +64,8 @@ export default function Catalog() {
 
   const loading = result.key !== requestKey
   const error = loading ? '' : result.error
-  const hasActiveFilters = Object.values(activeFilters).some(Boolean)
+  const activeFilterCount = Object.values(activeFilters).filter(Boolean).length
+  const hasActiveFilters = activeFilterCount > 0
   const total = result.meta?.total ?? result.data.length
 
   function updateDraft(event) {
@@ -86,11 +89,13 @@ export default function Catalog() {
   function handleSubmit(event) {
     event.preventDefault()
     applyFilters(draft, 1)
+    setFiltersOpen(false)
   }
 
   function clearFilters() {
     setDraftState({ key: '', values: emptyFilters })
     setSearchParams({})
+    setFiltersOpen(false)
   }
 
   function handlePageChange(nextPage) {
@@ -116,7 +121,33 @@ export default function Catalog() {
       </div>
 
       <section className="catalog-filters" aria-label="Filtros do catálogo">
-        <form className="search-bar catalog-search-bar" onSubmit={handleSubmit}>
+        <div className="catalog-filters-bar">
+          <button
+            type="button"
+            className="catalog-filters-toggle"
+            aria-expanded={filtersOpen}
+            aria-controls="catalog-filters-form"
+            onClick={() => setFiltersOpen(open => !open)}
+          >
+            <span>
+              Filtros
+              {activeFilterCount > 0 && (
+                <span className="filter-count-badge">{activeFilterCount}</span>
+              )}
+            </span>
+            <small>{filtersOpen ? 'Ocultar' : 'Mostrar'}</small>
+          </button>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              className="button button-outline catalog-filters-clear-mobile"
+              onClick={clearFilters}
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
+        <form id="catalog-filters-form" className={`search-bar catalog-search-bar ${filtersOpen ? 'is-open' : ''}`} onSubmit={handleSubmit}>
           <label>
             <span>ESPÉCIE</span>
             <select name="species" value={draft.species} onChange={updateDraft}>
@@ -186,32 +217,29 @@ export default function Catalog() {
         <span aria-live="polite">
           {loading
             ? 'Buscando animais disponíveis…'
-            : `${total} ${total === 1 ? 'amigo disponível' : 'amigos disponíveis'}`}
+            : error
+              ? 'Não foi possível atualizar os resultados'
+              : `${total} ${total === 1 ? 'amigo encontrado' : 'amigos encontrados'}`}
         </span>
         <span className="demo-label">
           {result.meta?.last_page > 1
             ? `Página ${page} de ${result.meta.last_page}`
-            : 'Animais cadastrados por organizações e protetores aprovados'}
+            : hasActiveFilters
+              ? `${activeFilterCount} ${activeFilterCount === 1 ? 'filtro ativo' : 'filtros ativos'}`
+              : 'Organizações e protetores aprovados'}
         </span>
       </div>
 
       {error && (
-        <div className="empty" role="alert">
-          <p>{error}</p>
-          <button
-            type="button"
-            className="button button-outline"
-            onClick={() => setRetryCount(count => count + 1)}
-          >
-            Tentar novamente
-          </button>
-        </div>
+        <ErrorState
+          title="Não foi possível carregar o catálogo."
+          message={error}
+          onRetry={() => setRetryCount(count => count + 1)}
+        />
       )}
 
       {!error && loading && (
-        <div className="empty" role="status">
-          <p>Carregando animais disponíveis…</p>
-        </div>
+        <LoadingState message="Carregando animais disponíveis…" />
       )}
 
       {!error && !loading && result.data.length > 0 && (
@@ -226,18 +254,19 @@ export default function Catalog() {
       )}
 
       {!error && !loading && result.data.length === 0 && (
-        <div className="empty">
-          <span className="empty-heart">♡</span>
-          <h2>Ainda não encontramos um amigo com esses critérios.</h2>
-          <p>
-            Tente outra cidade, estado ou limpe os filtros para visualizar todos os animais disponíveis.
-          </p>
-          {hasActiveFilters && (
-            <button type="button" className="button" onClick={clearFilters}>
-              Limpar filtros
-            </button>
-          )}
-        </div>
+        hasActiveFilters ? (
+          <EmptyState
+            title="Nenhum amigo encontrado com esses filtros."
+            description="Tente ajustar espécie, porte, sexo ou localização para visualizar outros animais disponíveis."
+            actionLabel="Limpar filtros"
+            onAction={clearFilters}
+          />
+        ) : (
+          <EmptyState
+            title="Ainda não há animais publicados no catálogo."
+            description="Organizações e protetores aprovados publicam novos perfis continuamente. Volte em breve!"
+          />
+        )
       )}
     </main>
   )

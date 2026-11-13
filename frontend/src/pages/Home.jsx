@@ -2,33 +2,42 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { pets } from "../data/pets";
 import PetCard from "../components/PetCard";
+import { EmptyState, ErrorState, LoadingState } from "../components/CatalogStates";
 import { api } from "../services/api";
 
 const initialFilters = { species: "", size: "", city: "" };
 
 export default function Home() {
   const navigate = useNavigate();
-  const [featuredPets, setFeaturedPets] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [catalogMessage, setCatalogMessage] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
+  const [result, setResult] = useState({ key: -1, data: [], error: "" });
   const [draft, setDraft] = useState(initialFilters);
 
   useEffect(() => {
     let active = true;
     api.pets({ featured: 1, per_page: 6 })
       .then((response) => {
-        if (active) setFeaturedPets(response.data || []);
+        if (active) {
+          setResult({ key: retryCount, data: response?.data || [], error: "" });
+        }
       })
       .catch((error) => {
-        if (active) setCatalogMessage(error.message);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
+        if (active) {
+          setResult({
+            key: retryCount,
+            data: [],
+            error: error.message || "Não foi possível carregar os animais em destaque.",
+          });
+        }
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [retryCount]);
+
+  const loading = result.key !== retryCount;
+  const featuredPets = result.data;
+  const errorMessage = loading ? "" : result.error;
 
   const update = (event) =>
     setDraft({ ...draft, [event.target.name]: event.target.value });
@@ -170,14 +179,20 @@ export default function Home() {
           <span aria-live="polite">
             {loading
               ? "Carregando destaques…"
-              : `${featuredPets.length} ${featuredPets.length === 1 ? "animal em destaque" : "animais em destaque"}`}
+              : errorMessage
+                ? "Destaques indisponíveis no momento"
+                : `${featuredPets.length} ${featuredPets.length === 1 ? "animal em destaque" : "animais em destaque"}`}
           </span>
           <span className="demo-label">Animais cadastrados por organizações parceiras</span>
         </div>
         {loading ? (
-          <div className="empty" role="status">
-            <p>Buscando bichinhos que esperam por um lar…</p>
-          </div>
+          <LoadingState message="Buscando bichinhos que esperam por um lar…" />
+        ) : errorMessage ? (
+          <ErrorState
+            title="Não foi possível carregar os destaques agora."
+            message={errorMessage}
+            onRetry={() => setRetryCount((count) => count + 1)}
+          />
         ) : featuredPets.length ? (
           <>
             <div className="pet-grid">
@@ -192,18 +207,13 @@ export default function Home() {
             </div>
           </>
         ) : (
-          <div className="empty">
-            <span className="empty-heart">♡</span>
-            <h3>Novos amigos chegarão em breve.</h3>
-            <p>
-              Explore o catálogo completo para consultar todas as opções disponíveis.
-            </p>
-            <Link to="/animais" className="button">
-              Ver todos os animais
-            </Link>
-          </div>
+          <EmptyState
+            title="Novos amigos chegarão em breve."
+            description="Explore o catálogo completo para consultar todas as opções disponíveis."
+            actionLabel="Ver todos os animais"
+            actionTo="/animais"
+          />
         )}
-        {catalogMessage && <p className="feedback" role="status">{catalogMessage}</p>}
       </section>
       <section id="como-funciona" className="how-section">
         <div className="container">

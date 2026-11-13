@@ -142,7 +142,9 @@ test('provider updates adoption progress', async ({ page }) => {
   const state = await setup(page, 'organization_owner')
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.goto('/dashboard')
-  await expect(page.getByText('Moradia: Casa · Porto Ferreira/SP · Possui outros animais: Sim')).toBeVisible()
+  await expect(page.getByText('Casa · Porto Ferreira/SP')).toBeVisible()
+  await expect(page.getByText('Possui outros animais')).toBeVisible()
+  await expect(page.getByText('Sim', { exact: true })).toBeVisible()
   await expect(page.getByText('Experiência com animais: Cuido de gatos há 10 anos.')).toBeVisible()
   await page.getByLabel('Próxima etapa').selectOption('approved')
   await page.getByRole('button', { name: 'Atualizar solicitação' }).click()
@@ -186,7 +188,7 @@ test('home featured section navigates to full catalog with filters, URL sync, an
 
   await page.getByRole('link', { name: /Ver todos os animais/i }).first().click()
   await expect(page).toHaveURL(/\/animais$/)
-  await expect(page.getByText('2 amigos disponíveis')).toBeVisible()
+  await expect(page.getByText('2 amigos encontrados')).toBeVisible()
 
   await page.getByRole('button', { name: 'Próxima' }).click()
   await expect(page).toHaveURL(/\/animais\?page=2$/)
@@ -196,7 +198,7 @@ test('home featured section navigates to full catalog with filters, URL sync, an
   await page.getByLabel('CIDADE').fill('Porto Ferreira')
   await page.getByRole('button', { name: /Buscar amigos/i }).click()
   await expect(page).toHaveURL(/\/animais\?species=dog&city=Porto\+Ferreira$/)
-  await expect(page.getByText('1 amigo disponível')).toBeVisible()
+  await expect(page.getByText('1 amigo encontrado')).toBeVisible()
 
   await page.getByRole('button', { name: 'Limpar filtros' }).click()
   await expect(page).toHaveURL(/\/animais$/)

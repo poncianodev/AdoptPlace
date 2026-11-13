@@ -26,8 +26,10 @@ export default function OrganizationEditor({ organization }) {
       <label className="field">E-mail de contato<input name="email" type="email" defaultValue={profile.email || ''} required /></label>
       <label className="field">Telefone público<input name="phone" defaultValue={profile.phone || ''} maxLength={30} /></label>
       <label className="checkbox-label"><input name="contact_publicly_visible" type="checkbox" defaultChecked={profile.contact_publicly_visible} /> Exibir meus contatos no perfil público e nos anúncios</label>
-      <button className="button" disabled={busy}>{busy ? 'Salvando…' : 'Salvar perfil'}</button>
-    </fieldset><p role="status">{message}</p></form>
-    {profile.verification_status === 'approved' && <Link className="text-link" to={`/organizacoes/${profile.slug}`}>Ver perfil público ↗</Link>}
+      <div className="org-editor-actions">
+        <button type="submit" className="button" disabled={busy}>{busy ? 'Salvando…' : 'Salvar perfil'}</button>
+        {profile.verification_status === 'approved' && <Link className="text-link" to={`/organizacoes/${profile.slug}`}>Ver perfil público ↗</Link>}
+      </div>
+    </fieldset><p role="status" className={message ? 'workspace-feedback feedback' : 'workspace-feedback feedback is-empty'}>{message}</p></form>
   </details>
 }

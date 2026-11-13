@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../services/api'
-import { Pagination } from './Account'
+import Pagination from '../components/Pagination'
 import PanelShell, { PanelIcon } from '../components/PanelShell'
+import { ErrorState, LoadingState } from '../components/CatalogStates'
 
 const statusLabels = { pending: 'Em análise', approved: 'Aprovada', rejected: 'Não aprovada', suspended: 'Suspensa' }
 export default function Admin() {
@@ -24,11 +25,12 @@ function Moderation() {
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState('')
   useEffect(() => {
     let active = true
     Promise.all([api.adminOrganizations(page), api.adminReviews(reviewPage, reviewStatus)])
-      .then(([o, r]) => { if (active) { setOrgs(o); setReviews(r); setLoaded(true) } })
-      .catch(error => { if (active) setMessage(error.message) })
+      .then(([o, r]) => { if (active) { setOrgs(o); setReviews(r); setLoadError(''); setLoaded(true) } })
+      .catch(error => { if (active) { setLoadError(error.message || 'Não foi possível carregar os dados administrativos.'); setLoaded(true) } })
     return () => { active = false }
   }, [page, reviewPage, reviewStatus, version])
   async function perform(operation) {
@@ -44,8 +46,15 @@ function Moderation() {
     </div>
     <p role="status" className={message ? 'workspace-feedback' : 'workspace-feedback is-empty'}>{message}</p>
     <section className="workspace-section" aria-labelledby="organizations-title"><div className="workspace-section-heading"><div><h2 id="organizations-title">Organizações e protetores</h2><p>Confira as informações antes de atualizar a situação do cadastro.</p></div><label className="workspace-search"><span className="sr-only">Buscar organização nesta página</span><input type="search" placeholder="Buscar nesta página…" value={query} onChange={event => setQuery(event.target.value)} /></label></div>
-      {!loaded && !message && <p className="workspace-empty" role="status">Carregando cadastros…</p>}
-      {loaded && !visible.length && <div className="workspace-empty"><PanelIcon name="person" /><strong>Nenhum cadastro encontrado</strong><p>{query ? 'Tente outro nome nesta página.' : 'Os novos cadastros aparecerão aqui para análise.'}</p></div>}
+      {!loaded && <LoadingState message="Carregando cadastros…" />}
+      {loaded && loadError && (
+        <ErrorState
+          title="Não foi possível carregar os cadastros."
+          message={loadError}
+          onRetry={() => { setLoaded(false); setVersion(v => v + 1) }}
+        />
+      )}
+      {loaded && !loadError && !visible.length && <div className="workspace-empty"><PanelIcon name="person" /><strong>Nenhum cadastro encontrado</strong><p>{query ? 'Tente outro nome nesta página.' : 'Os novos cadastros aparecerão aqui para análise.'}</p></div>}
       <div className="moderation-list">{visible.map(org => <article className="moderation-card" key={org.id}>
         <div className="moderation-profile"><div className="moderation-profile-title"><span className="provider-avatar">{org.name.slice(0, 1).toUpperCase()}</span><div><h3>{org.name}</h3><span>{org.type === 'ngo' ? 'Organização' : 'Protetor individual'} · {org.city}, {org.state}</span></div></div>
           <span className={`workspace-badge ${org.verification_status}`}>{statusLabels[org.verification_status] || 'Em análise'}</span><p className="provider-description">{org.description || 'Apresentação não informada.'}</p>

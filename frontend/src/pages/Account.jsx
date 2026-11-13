@@ -4,15 +4,39 @@ import { useAuth } from '../context/AuthContext'
 import { useFavorites } from '../context/FavoritesContext'
 import { api } from '../services/api'
 import PetCard from '../components/PetCard'
+import Pagination from '../components/Pagination'
 import PanelShell, { PanelIcon } from '../components/PanelShell'
+import { LoadingState } from '../components/CatalogStates'
 
-const statuses = { new: 'Interesse enviado', reviewing: 'Em análise', contacted: 'Em contato', approved: 'Aprovada — confirme após receber o animal', completed: 'Adoção concluída', rejected: 'Não aprovada', withdrawn: 'Cancelada por você' }
+const statuses = {
+  new: 'Interesse enviado',
+  reviewing: 'Em análise',
+  contacted: 'Em contato',
+  approved: 'Aprovada — confirme após receber o animal',
+  completed: 'Adoção concluída',
+  rejected: 'Não aprovada',
+  withdrawn: 'Cancelada por você',
+}
+
+function badgeToneForStatus(status) {
+  if (status === 'approved' || status === 'completed') return 'approved'
+  if (status === 'rejected' || status === 'withdrawn') return 'rejected'
+  return 'pending'
+}
+
+function roleDisplay(role) {
+  if (role === 'admin') return 'Administrador'
+  if (role === 'organization_owner') return 'Organização / protetor'
+  return 'Adotante'
+}
+
 export default function Account() {
   const { user, loading, loggingOut, refreshUser } = useAuth()
   if (loading) return <main id="main" className="container empty">Carregando sua conta…</main>
   if (!user) return <Navigate to="/login" state={loggingOut ? null : { from: '/minha-conta' }} replace />
   return <AccountContent user={user} refreshUser={refreshUser} />
 }
+
 function AccountContent({ user, refreshUser }) {
   const { revision: favoritesRevision } = useFavorites()
   const [pets, setPets] = useState({ data: [], meta: {} })
@@ -28,11 +52,13 @@ function AccountContent({ user, refreshUser }) {
   const petsKey = `${petPage}:${favoritesRevision}`
   const adoptionsLoading = loadedAdoptionsKey !== adoptionsKey
   const petsLoading = loadedPetsKey !== petsKey
+
   useEffect(() => {
     if (!user.email_verified_at && refreshUser) {
       refreshUser({ force: false })
     }
   }, [user.email_verified_at, refreshUser])
+
   useEffect(() => {
     let active = true
     api.myAdoptions(page)
@@ -41,6 +67,7 @@ function AccountContent({ user, refreshUser }) {
       .finally(() => { if (active) setLoadedAdoptionsKey(adoptionsKey) })
     return () => { active = false }
   }, [page, version, adoptionsKey])
+
   useEffect(() => {
     let active = true
     api.favoritePets(petPage)
@@ -49,40 +76,216 @@ function AccountContent({ user, refreshUser }) {
       .finally(() => { if (active) setLoadedPetsKey(petsKey) })
     return () => { active = false }
   }, [petPage, favoritesRevision, petsKey])
+
   async function action(operation) {
-    setBusy(true); setMessage('')
-    try { const result = await operation(); setMessage(result?.message || 'Atualizado com sucesso.'); setVersion(value => value + 1) } catch (error) { setMessage(Object.values(error.errors || {}).flat().join(' ') || error.message) } finally { setBusy(false) }
+    setBusy(true)
+    setMessage('')
+    try {
+      const result = await operation()
+      setMessage(result?.message || 'Atualizado com sucesso.')
+      setVersion(value => value + 1)
+    } catch (error) {
+      setMessage(Object.values(error.errors || {}).flat().join(' ') || error.message)
+    } finally {
+      setBusy(false)
+    }
   }
-  return <PanelShell title="Minha conta" subtitle={`Olá, ${user.name}. Acompanhe seus encontros e os animais que conquistaram seu coração.`}>
-    {!user.email_verified_at && <div className="account-verification"><span className="metric-icon"><PanelIcon name="shield" /></span><div><strong>Vamos confirmar seu e-mail?</strong><p>Confira o link enviado para sua caixa de entrada.</p></div><button className="button button-outline" disabled={busy} onClick={() => action(api.resendVerification)}>Reenviar confirmação</button></div>}
-    <p role="status" className="feedback">{message}</p>
-    <section className="workspace-section"><div className="workspace-section-heading"><div><h2>Minhas adoções</h2><p>Cada etapa de um novo começo, em um só lugar.</p></div><span className="workspace-badge">Acompanhamento</span></div>
-      {adoptionsLoading && !adoptions.data.length && <p className="workspace-empty" role="status">Carregando suas solicitações…</p>}
-      {!adoptionsLoading && !adoptions.data.length && <div className="workspace-empty"><PanelIcon name="heart" /><strong>Uma nova história pode começar aqui</strong><p>Você ainda não enviou solicitações.</p><Link className="button button-outline" to="/animais">Conheça os animais disponíveis</Link></div>}
-      {adoptions.data.map(item => {
-        const lastReason = item.status_history?.at?.(-1)?.reason
-        return <article key={item.id} className="adoption-item"><h3>{item.pet?.name || 'Animal indisponível'}</h3><p><strong>{statuses[item.status] || item.status}</strong></p>
-          {item.status === 'approved' && <p className="small muted">Animal reservado para você. Confirme abaixo somente após receber o animal.</p>}
-          {lastReason && ['rejected', 'withdrawn'].includes(item.status) && <p className="small muted">{lastReason}</p>}
-          {item.pet?.organization && <Link to={`/organizacoes/${item.pet.organization.slug}`}>{item.pet.organization.name} ↗</Link>}
-          {item.status === 'approved' && <button className="button" disabled={busy} onClick={() => { if (window.confirm('Você já recebeu o animal e deseja confirmar a adoção?')) action(() => api.adoptionAction(item.id, 'confirm')) }}>Recebi o animal: confirmar adoção</button>}
-          {['new', 'reviewing', 'contacted', 'approved'].includes(item.status) && <button className="button button-outline" disabled={busy} onClick={() => { if (window.confirm('Deseja cancelar esta solicitação de adoção?')) action(() => api.adoptionAction(item.id, 'withdraw')) }}>Cancelar solicitação</button>}
-          {item.status === 'completed' && (item.review ? <p>Avaliação enviada · {item.review.status === 'published' ? 'Publicada' : item.review.status === 'hidden' ? 'Não publicada' : 'Aguardando moderação'}</p> : <ReviewForm busy={busy} onSave={body => action(() => api.review(item.id, body))} />)}
-        </article>
-      })}<Pagination page={page} meta={adoptions.meta} onChange={setPage} />
-    </section>
-    <section className="workspace-section"><div className="workspace-section-heading"><div><h2>Meus favoritos</h2><p>Salvos na sua conta, prontos para um novo encontro.</p></div><PanelIcon name="heart" /></div><div className="pet-grid">{pets.data.map(pet => <PetCard key={pet.id} pet={pet} />)}</div>
-      {petsLoading && !pets.data.length && <p className="workspace-empty" role="status">Carregando seus favoritos…</p>}
-      {!petsLoading && !pets.data.length && <div className="workspace-empty"><PanelIcon name="heart" /><strong>Aquele encontro que fica no coração</strong><p>Nenhum animal disponível nos seus favoritos.</p><Link to="/animais" className="text-link">Explorar o catálogo ↗</Link></div>}<Pagination page={petPage} meta={pets.meta} onChange={setPetPage} /></section>
-  </PanelShell>
+
+  return (
+    <PanelShell
+      title="Minha conta"
+      subtitle={`Olá, ${user.name}. Acompanhe seus encontros e os animais que conquistaram seu coração.`}
+    >
+      {!user.email_verified_at && (
+        <div className="account-verification">
+          <span className="metric-icon"><PanelIcon name="shield" /></span>
+          <div>
+            <strong>Vamos confirmar seu e-mail?</strong>
+            <p>Confira o link enviado para sua caixa de entrada.</p>
+          </div>
+          <button type="button" className="button button-outline" disabled={busy} onClick={() => action(api.resendVerification)}>
+            Reenviar confirmação
+          </button>
+        </div>
+      )}
+
+      <p role="status" className={message ? 'workspace-feedback feedback' : 'workspace-feedback feedback is-empty'}>
+        {message}
+      </p>
+
+      <section className="workspace-section" aria-labelledby="account-info-title">
+        <div className="workspace-section-heading">
+          <div>
+            <h2 id="account-info-title">Dados da conta</h2>
+            <p>Informações cadastradas no seu perfil de acesso.</p>
+          </div>
+          <span className={`workspace-badge ${user.email_verified_at ? 'approved' : 'pending'}`}>
+            {user.email_verified_at ? 'E-mail verificado' : 'Aguardando confirmação'}
+          </span>
+        </div>
+        <dl className="account-profile-grid">
+          <div>
+            <dt>Nome</dt>
+            <dd>{user.name}</dd>
+          </div>
+          <div>
+            <dt>E-mail</dt>
+            <dd>{user.email || 'Não informado'}</dd>
+          </div>
+          <div>
+            <dt>Perfil</dt>
+            <dd>{roleDisplay(user.role)}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="workspace-section" aria-labelledby="account-adoptions-title">
+        <div className="workspace-section-heading">
+          <div>
+            <h2 id="account-adoptions-title">Minhas adoções</h2>
+            <p>Cada etapa de um novo começo, em um só lugar.</p>
+          </div>
+          <span className="workspace-badge">Acompanhamento</span>
+        </div>
+
+        {adoptionsLoading && !adoptions.data.length && (
+          <LoadingState message="Carregando suas solicitações…" />
+        )}
+
+        {!adoptionsLoading && !adoptions.data.length && (
+          <div className="workspace-empty">
+            <PanelIcon name="heart" />
+            <strong>Uma nova história pode começar aqui</strong>
+            <p>Você ainda não enviou solicitações.</p>
+            <Link className="button button-outline" to="/animais">Conheça os animais disponíveis</Link>
+          </div>
+        )}
+
+        {adoptions.data.map(item => {
+          const lastReason = item.status_history?.at?.(-1)?.reason
+          return (
+            <article key={item.id} className="adoption-item">
+              <div className="adoption-item-header">
+                <h3>{item.pet?.name || 'Animal indisponível'}</h3>
+                <span className={`workspace-badge ${badgeToneForStatus(item.status)}`}>
+                  {statuses[item.status] || item.status}
+                </span>
+              </div>
+
+              {item.status === 'approved' && (
+                <p className="small muted">Animal reservado para você. Confirme abaixo somente após receber o animal.</p>
+              )}
+              {lastReason && ['rejected', 'withdrawn'].includes(item.status) && (
+                <p className="small muted">{lastReason}</p>
+              )}
+              {item.pet?.organization && (
+                <Link to={`/organizacoes/${item.pet.organization.slug}`}>
+                  {item.pet.organization.name} ↗
+                </Link>
+              )}
+
+              {['new', 'reviewing', 'contacted', 'approved'].includes(item.status) && (
+                <div className="adoption-item-actions">
+                  {item.status === 'approved' && (
+                    <button
+                      type="button"
+                      className="button"
+                      disabled={busy}
+                      onClick={() => {
+                        if (window.confirm('Você já recebeu o animal e deseja confirmar a adoção?')) {
+                          action(() => api.adoptionAction(item.id, 'confirm'))
+                        }
+                      }}
+                    >
+                      Recebi o animal: confirmar adoção
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="button button-outline"
+                    disabled={busy}
+                    onClick={() => {
+                      if (window.confirm('Deseja cancelar esta solicitação de adoção?')) {
+                        action(() => api.adoptionAction(item.id, 'withdraw'))
+                      }
+                    }}
+                  >
+                    Cancelar solicitação
+                  </button>
+                </div>
+              )}
+
+              {item.status === 'completed' && (
+                item.review ? (
+                  <p className="small">
+                    Avaliação enviada · {item.review.status === 'published' ? 'Publicada' : item.review.status === 'hidden' ? 'Não publicada' : 'Aguardando moderação'}
+                  </p>
+                ) : (
+                  <ReviewForm busy={busy} onSave={body => action(() => api.review(item.id, body))} />
+                )
+              )}
+            </article>
+          )
+        })}
+
+        <Pagination page={page} meta={adoptions.meta} onChange={setPage} />
+      </section>
+
+      <section className="workspace-section" aria-labelledby="account-favorites-title">
+        <div className="workspace-section-heading">
+          <div>
+            <h2 id="account-favorites-title">Meus favoritos</h2>
+            <p>Salvos na sua conta, prontos para um novo encontro.</p>
+          </div>
+          <PanelIcon name="heart" />
+        </div>
+
+        <div className="pet-grid">
+          {pets.data.map(pet => <PetCard key={pet.id} pet={pet} />)}
+        </div>
+
+        {petsLoading && !pets.data.length && (
+          <LoadingState message="Carregando seus favoritos…" />
+        )}
+
+        {!petsLoading && !pets.data.length && (
+          <div className="workspace-empty">
+            <PanelIcon name="heart" />
+            <strong>Aquele encontro que fica no coração</strong>
+            <p>Nenhum animal disponível nos seus favoritos.</p>
+            <Link to="/animais" className="text-link">Explorar o catálogo ↗</Link>
+          </div>
+        )}
+
+        <Pagination page={petPage} meta={pets.meta} onChange={setPetPage} />
+      </section>
+    </PanelShell>
+  )
 }
-export function Pagination({ page, meta, onChange }) {
-  if (!meta || meta.last_page <= 1 || !meta.last_page) return null
-  return <div className="register-actions"><button className="button button-outline" disabled={page <= 1} onClick={() => onChange(page - 1)}>Anterior</button><span>Página {page} de {meta.last_page}</span><button className="button button-outline" disabled={page >= meta.last_page} onClick={() => onChange(page + 1)}>Próxima</button></div>
-}
+
 function ReviewForm({ busy, onSave }) {
-  return <form onSubmit={event => { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); onSave({ ...data, rating: Number(data.rating) }) }}>
-    <h3>Como foi sua experiência?</h3><label className="field">Nota<select name="rating" required><option value="">Selecione</option>{[5, 4, 3, 2, 1].map(n => <option key={n} value={n}>{n} de 5</option>)}</select></label>
-    <label className="field">Sua avaliação<textarea name="comment" required minLength={10} maxLength={1500} /></label><p className="small muted">Sua avaliação será pública após moderação. Não inclua telefone, endereço ou outros dados pessoais.</p><button className="button" disabled={busy}>Enviar avaliação</button>
-  </form>
+  return (
+    <form
+      onSubmit={event => {
+        event.preventDefault()
+        const data = Object.fromEntries(new FormData(event.currentTarget))
+        onSave({ ...data, rating: Number(data.rating) })
+      }}
+    >
+      <h3>Como foi sua experiência?</h3>
+      <label className="field">
+        Nota
+        <select name="rating" required>
+          <option value="">Selecione</option>
+          {[5, 4, 3, 2, 1].map(n => <option key={n} value={n}>{n} de 5</option>)}
+        </select>
+      </label>
+      <label className="field">
+        Sua avaliação
+        <textarea name="comment" required minLength={10} maxLength={1500} />
+      </label>
+      <p className="small muted">Sua avaliação será pública após moderação. Não inclua telefone, endereço ou outros dados pessoais.</p>
+      <button type="submit" className="button" disabled={busy}>Enviar avaliação</button>
+    </form>
+  )
 }

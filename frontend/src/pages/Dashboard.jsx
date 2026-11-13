@@ -5,7 +5,8 @@ import { api } from '../services/api'
 import OrganizationEditor from '../components/OrganizationEditor'
 import AdoptionManagement from '../components/AdoptionManagement'
 import PanelShell from '../components/PanelShell'
-import { Pagination } from './Account'
+import Pagination from '../components/Pagination'
+import { LoadingState } from '../components/CatalogStates'
 
 const statusLabel = {
   draft: 'Rascunho',
@@ -256,7 +257,7 @@ export default function Dashboard() {
           )}
 
           {loading ? (
-            <p>Carregando animais…</p>
+            <LoadingState message="Carregando animais…" />
           ) : (
             <div className="table-scroll">
               <table>
@@ -364,7 +365,7 @@ export default function Dashboard() {
               <Pagination page={page} meta={petsResult.meta} onChange={setPage} />
             </div>
           )}
-          <p className="feedback" role="status">
+          <p className={message ? 'workspace-feedback feedback' : 'workspace-feedback feedback is-empty'} role="status">
             {message}
           </p>
         </div>
