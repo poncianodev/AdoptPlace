@@ -20,6 +20,7 @@ import Admin from "./pages/Admin";
 import PasswordRecovery from "./pages/PasswordRecovery";
 import Privacy from "./pages/Privacy";
 import Dashboard from "./pages/Dashboard";
+import { preferredScrollBehavior } from "./utils/scroll";
 import "./styles-v2.css";
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
@@ -27,7 +28,7 @@ function ScrollToTop() {
     if (hash)
       document
         .getElementById(hash.slice(1))
-        ?.scrollIntoView({ behavior: "smooth" });
+        ?.scrollIntoView({ behavior: preferredScrollBehavior() });
     else window.scrollTo(0, 0);
     document.title = "AdoptPlace · Um encontro que muda duas vidas";
   }, [pathname, hash]);
@@ -36,7 +37,7 @@ function ScrollToTop() {
 function ProtectedRoute({ children }) {
   const { user, loading, loggingOut } = useAuth();
   const location = useLocation();
-  if (loading) return <main className="container empty"><p>Carregando seu portal…</p></main>;
+  if (loading) return <main id="main" className="container empty"><p>Carregando seu portal…</p></main>;
   if (user?.role === 'adopter') return <Navigate to="/animais" replace />;
   if (user?.role === 'admin') return <Navigate to="/administracao" replace />;
   return user ? children : <Navigate to="/login" replace state={loggingOut ? null : { from: `${location.pathname}${location.search}` }} />;

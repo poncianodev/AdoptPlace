@@ -52,8 +52,8 @@ export default function PetDetail() {
     api.pet(id).then(setPet).catch(err => setError(err.message)).finally(() => setLoading(false))
   }, [id])
 
-  if (loading) return <main className="container empty"><p>Buscando esse bichinho…</p></main>
-  if (!pet) return <main className="container empty"><h1>Esse bichinho não foi encontrado</h1><p>{error}</p><Link className="button" to="/animais">Explorar catálogo</Link></main>
+  if (loading) return <main id="main" className="container empty"><p>Buscando esse bichinho…</p></main>
+  if (!pet) return <main id="main" className="container empty"><h1>Esse bichinho não foi encontrado</h1><p>{error}</p><Link className="button" to="/animais">Explorar catálogo</Link></main>
 
   const galleryPhotos = Array.isArray(pet.photos)
     ? pet.photos.map(item => (typeof item === 'string' ? item : item?.url)).filter(Boolean)

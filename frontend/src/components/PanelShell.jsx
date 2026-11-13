@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { defaultPathForUser, useAuth } from '../context/AuthContext'
 import { Brand } from './Layout'
 import '../panel.css'
 
@@ -26,7 +26,7 @@ export default function PanelShell({ title, subtitle, children, action }) {
     }
   }
   return <div className="workspace">
-    <aside className="workspace-sidebar"><Brand /><span className="workspace-label">{admin ? 'CENTRAL DE SUPORTE' : 'SEU ESPAÇO'}</span>
+    <aside className="workspace-sidebar"><Brand to={defaultPathForUser(user)} ariaLabel={admin ? 'AdoptPlace, administração' : user?.role === 'adopter' ? 'AdoptPlace, catálogo de animais' : 'AdoptPlace, painel da organização'} /><span className="workspace-label">{admin ? 'CENTRAL DE SUPORTE' : 'SEU ESPAÇO'}</span>
       <nav aria-label="Navegação do painel">
         {admin && <NavLink to="/administracao"><PanelIcon name="shield" />Administração</NavLink>}
         {!admin && user?.role !== 'adopter' && <NavLink to="/dashboard"><PanelIcon />Painel da organização</NavLink>}

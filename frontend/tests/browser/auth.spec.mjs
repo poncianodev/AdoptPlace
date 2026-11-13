@@ -1,8 +1,12 @@
 import { test, expect } from '@playwright/test'
 
 async function mockApi(page, options = {}) {
+  await page.route('https://fonts.googleapis.com/**', route => route.fulfill({ status: 200, contentType: 'text/css', body: '' }))
+  await page.route('https://fonts.gstatic.com/**', route => route.abort())
   await page.route('https://viacep.com.br/**', route => route.fulfill({ status: 503, json: {} }))
   let user = options.user || null
+  await page.route('https://fonts.googleapis.com/**', route => route.fulfill({ status: 200, contentType: 'text/css', body: '' }))
+  await page.route('https://fonts.gstatic.com/**', route => route.abort())
   await page.route('**/sanctum/csrf-cookie', route => route.fulfill({ status: 204 }))
   await page.route('**/api/v1/**', async route => {
     const path = new URL(route.request().url()).pathname
@@ -74,10 +78,12 @@ test('adopter registration, session refresh and dashboard protection', async ({ 
   await page.getByRole('button', { name: 'Criar minha conta gratuita' }).click()
   await expect(page).toHaveURL(/\/animais$/)
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Sair', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: /Menu da conta de/i }).click()
+  await expect(page.getByRole('menuitem', { name: 'Sair', exact: true })).toBeVisible()
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/animais$/)
-  await page.getByRole('button', { name: 'Sair', exact: true }).click()
+  await page.getByRole('button', { name: /Menu da conta de/i }).click()
+  await page.getByRole('menuitem', { name: 'Sair', exact: true }).click()
   await expect(page.getByRole('link', { name: 'Entrar', exact: true })).toBeVisible()
 })
 
@@ -154,6 +160,8 @@ test('switching accounts across admin, ngo, protector and adopter clears previou
   let currentUser = null
   let verificationShouldFail = true
 
+  await page.route('https://fonts.googleapis.com/**', route => route.fulfill({ status: 200, contentType: 'text/css', body: '' }))
+  await page.route('https://fonts.gstatic.com/**', route => route.abort())
   await page.route('**/sanctum/csrf-cookie', route => route.fulfill({ status: 204 }))
   await page.route('**/api/v1/**', async route => {
     const url = new URL(route.request().url())
@@ -229,7 +237,8 @@ test('switching accounts across admin, ngo, protector and adopter clears previou
   await expect(page).toHaveURL(/\/animais$/)
 
   // Navigating back to /minha-conta shows email already verified without manual reload
-  await page.getByRole('link', { name: 'Minha conta' }).click()
+  await page.getByRole('button', { name: /Menu da conta de/i }).click()
+  await page.getByRole('menuitem', { name: 'Minha conta' }).click()
   await expect(page).toHaveURL(/\/minha-conta$/)
   await expect(page.getByText('Vamos confirmar seu e-mail?')).toHaveCount(0)
 })

@@ -6,6 +6,8 @@ const pet2 = { id: 'pet2', name: 'Bento', slug: 'bento', species: 'dog', sex: 'u
 const paginate = (data, meta = {}) => ({ data, meta: { current_page: 1, last_page: 1, total: data.length, ...meta } })
 async function setup(page, role = 'adopter') {
   const state = { favorites: [], status: 'approved', review: null, queries: [], user: role ? { id: 'user1', name: 'Ana', email: 'ana@example.test', role, status: 'active', organization: role === 'organization_owner' ? org : null } : null }
+  await page.route('https://fonts.googleapis.com/**', route => route.fulfill({ status: 200, contentType: 'text/css', body: '' }))
+  await page.route('https://fonts.gstatic.com/**', route => route.abort())
   await page.route('**/sanctum/csrf-cookie', route => route.fulfill({ status: 204 }))
   await page.route('**/api/v1/**', async route => {
     const url = new URL(route.request().url())
@@ -242,7 +244,7 @@ test('provider edits draft pet, manages photos, publishes and archives in dashbo
   }
   state.orgPets = [state.draftPet, pet]
 
-  await page.goto('/dashboard')
+  await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Rascunho privado · Clique para editar')).toBeVisible()
 
   await page.getByRole('button', { name: 'Editar Pipoca Rascunho' }).click()

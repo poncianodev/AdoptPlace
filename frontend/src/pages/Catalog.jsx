@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import PetCard from '../components/PetCard'
+import { preferredScrollBehavior } from '../utils/scroll'
 import { Pagination } from './Account'
 import { api } from '../services/api'
 
@@ -94,7 +95,7 @@ export default function Catalog() {
 
   function handlePageChange(nextPage) {
     applyFilters(activeFilters, nextPage)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    window.scrollTo({ top: 0, behavior: preferredScrollBehavior() })
   }
 
   return (

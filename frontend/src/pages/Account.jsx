@@ -9,7 +9,7 @@ import PanelShell, { PanelIcon } from '../components/PanelShell'
 const statuses = { new: 'Interesse enviado', reviewing: 'Em análise', contacted: 'Em contato', approved: 'Aprovada — confirme após receber o animal', completed: 'Adoção concluída', rejected: 'Não aprovada', withdrawn: 'Cancelada por você' }
 export default function Account() {
   const { user, loading, loggingOut, refreshUser } = useAuth()
-  if (loading) return <main className="container empty">Carregando sua conta…</main>
+  if (loading) return <main id="main" className="container empty">Carregando sua conta…</main>
   if (!user) return <Navigate to="/login" state={loggingOut ? null : { from: '/minha-conta' }} replace />
   return <AccountContent user={user} refreshUser={refreshUser} />
 }
