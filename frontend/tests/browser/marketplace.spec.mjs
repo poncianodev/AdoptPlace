@@ -5,7 +5,7 @@ const pet = { id: 'pet1', name: 'Luna', slug: 'luna', species: 'cat', breed: 'SR
 const pet2 = { id: 'pet2', name: 'Bento', slug: 'bento', species: 'dog', sex: 'unknown', size: 'small', status: 'published', location: { city: 'Porto Ferreira', state: 'SP' }, organization: org }
 const paginate = (data, meta = {}) => ({ data, meta: { current_page: 1, last_page: 1, total: data.length, ...meta } })
 async function setup(page, role = 'adopter') {
-  const state = { favorites: [], status: 'approved', review: null, queries: [], user: role ? { id: 'user1', name: 'Ana', email: 'ana@example.test', role, status: 'active', organization: role === 'organization_owner' ? org : null } : null }
+  const state = { favorites: [], status: 'approved', review: null, queries: [], user: role ? { id: 'user1', name: 'Ana', email: 'ana@example.test', role, status: 'active', can_manage_animals: role === 'organization_owner', organization: role === 'organization_owner' ? org : null } : null }
   await page.route('https://fonts.googleapis.com/**', route => route.fulfill({ status: 200, contentType: 'text/css', body: '' }))
   await page.route('https://fonts.gstatic.com/**', route => route.abort())
   await page.route('**/sanctum/csrf-cookie', route => route.fulfill({ status: 204 }))

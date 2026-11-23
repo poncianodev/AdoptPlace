@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\AnimalManagementAccess;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -12,13 +13,11 @@ class EnsureOrganizationApproved
     {
         $user = $request->user();
 
-        if ($user?->isAdmin()) {
-            return $next($request);
-        }
-
-        if (! $user?->organization?->isApproved()) {
+        $reason = $user ? AnimalManagementAccess::blockedReason($user) : 'not_provider';
+        if ($reason !== null) {
             return response()->json([
-                'message' => 'Sua organização precisa ser aprovada antes de publicar animais.',
+                'message' => 'Seu perfil ainda não está habilitado para gerenciar animais.',
+                'reason' => $reason,
             ], 403);
         }
 

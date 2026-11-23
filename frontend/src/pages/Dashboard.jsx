@@ -41,9 +41,17 @@ function normalizeHealth(health) {
   }
 }
 
+const managementMessages = {
+  email_unverified: 'Confirme seu e-mail em Minha conta para gerenciar animais.',
+  ngo_pending: 'O cadastro da sua ONG está em análise. Você poderá gerenciar animais após a aprovação administrativa.',
+  profile_suspended: 'Seu perfil está suspenso. A gestão de animais está bloqueada.',
+  profile_rejected: 'Seu cadastro não foi aprovado. A gestão de animais está bloqueada.',
+  protector_pending: 'Seu perfil ainda não foi ativado. Se o e-mail já foi confirmado, entre em contato com o suporte.',
+}
+
 export default function Dashboard() {
   const { user } = useAuth()
-  const approved = user?.organization?.verification_status === 'approved' || user?.role === 'admin'
+  const approved = user?.can_manage_animals === true
   const [petsResult, setPetsResult] = useState({ data: [], meta: {}, counts: null })
   const [requests, setRequests] = useState([])
   const [requestsTotal, setRequestsTotal] = useState(0)
@@ -180,9 +188,9 @@ export default function Dashboard() {
       subtitle={`${user?.organization?.name || user?.name} · Acompanhe quem espera um lar e os novos pedidos de adoção.`}
     >
       <section className="dashboard-main">
-        {user?.organization?.verification_status !== 'approved' && (
+        {!approved && (
           <p className="notice">
-            O cadastro está em análise. Você poderá gerenciar animais assim que a organização for aprovada.
+            {managementMessages[user?.animal_management_block_reason] || 'A gestão de animais está indisponível para este perfil.'}
           </p>
         )}
         <OrganizationEditor organization={user?.organization} />

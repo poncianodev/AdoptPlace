@@ -228,3 +228,16 @@ Sem essa variável, os testes integrados são ignorados. O usuário MongoDB prec
 Os testes Playwright simulados não equivalem aos cenários reais: validam a interface e seus contratos simulados, sem provar sessão, persistência e integração com a API real. Os testes PHP com MongoDB verificam persistência em banco temporário, mas também não substituem um fluxo completo no navegador com backend real.
 
 Os números acima foram fornecidos pelo usuário como resultados do Antigravity. A Etapa 9A não confirma data, ambiente ou commit exato dessas execuções, nem revalida as contagens de aprovação. Nenhuma suíte, lint ou build foi executada nesta etapa documental. As contagens antigas de 27 testes PHP/14 cenários de navegador foram retiradas para não representar incorretamente a entrega atual.
+
+## Autorização para gerenciar animais
+
+O adotante mantém as permissões da área pessoal sem revisão manual. O protetor individual começa pendente e passa a aprovado quando confirma o e-mail pelo link assinado. A ONG precisa confirmar o e-mail e receber aprovação administrativa, em qualquer ordem. A verificação nunca reativa um perfil suspenso ou rejeitado.
+
+Em um ambiente com acesso autorizado ao banco pretendido, use a prévia para identificar perfis legados elegíveis. Ela lista apenas IDs internos de protetores pendentes com um único usuário vinculado, ativo, com papel de responsável e e-mail confirmado.
+
+```sh
+php artisan protectors:activate-verified --database=<nome-exato>
+php artisan protectors:activate-verified --database=<nome-exato> --profile=<id-revisado> --apply
+```
+
+Substitua os marcadores pelos valores do ambiente. Confira também a conexão e o cluster antes de aplicar: o nome do banco, sozinho, não identifica o cluster. O comando aplica um perfil por vez, revalida a elegibilidade e grava a ativação e a auditoria na mesma transação MongoDB. Nada é agendado nem executado na inicialização. Faça a primeira validação em banco isolado.

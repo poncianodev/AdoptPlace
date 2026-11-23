@@ -21,7 +21,7 @@ async function mockApi(page, options = {}) {
     if (path.endsWith('/auth/register')) {
       const body = route.request().postDataJSON()
       if (options.register) return options.register(route, body)
-      user = { id: 'demo', name: body.name, role: body.account_type === 'adopter' ? 'adopter' : 'organization_owner', organization: body.account_type === 'adopter' ? null : { name: body.provider_name, verification_status: 'pending' } }
+      user = { id: 'demo', name: body.name, role: body.account_type === 'adopter' ? 'adopter' : 'organization_owner', can_manage_animals: false, animal_management_block_reason: 'email_unverified', organization: body.account_type === 'adopter' ? null : { name: body.provider_name, type: body.account_type, verification_status: 'pending' } }
       return reply({ data: user }, 201)
     }
     if (path.includes('/address/cep/')) {
@@ -100,7 +100,7 @@ test('password mismatch is visible and values survive backward navigation', asyn
 })
 
 for (const type of ['Represento uma ONG', 'Sou protetor individual']) {
-  test(`${type}: address and pending approval`, async ({ page }) => {
+  test(`${type}: address and verification required`, async ({ page }) => {
     await mockApi(page)
     await credentials(page, type)
     await page.getByLabel(type === 'Represento uma ONG' ? 'Nome da ONG' : 'Seu nome público como protetor').fill('Amigos dos animais')
@@ -118,10 +118,44 @@ for (const type of ['Represento uma ONG', 'Sou protetor individual']) {
     await page.getByLabel('Autorizo o uso dos dados').check()
     await page.getByRole('button', { name: 'Criar minha conta gratuita' }).click()
     await expect(page).toHaveURL(/\/dashboard$/)
-    await expect(page.getByText('O cadastro está em análise.', { exact: false })).toBeVisible()
+    await expect(page.getByText('Confirme seu e-mail em Minha conta para gerenciar animais.')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Cadastrar animal' })).toBeDisabled()
   })
 }
+
+test('dashboard follows API permission and refreshes it after email verification', async ({ page }) => {
+  const user = {
+    id: 'provider', name: 'Ana Protetora', role: 'organization_owner',
+    email_verified_at: null, can_manage_animals: false,
+    animal_management_block_reason: 'email_unverified',
+    organization: { name: 'Ana Protetora', type: 'independent_protector', verification_status: 'pending' },
+  }
+  await mockApi(page, { user })
+  const create = page.getByRole('button', { name: 'Cadastrar animal' })
+  await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText(/Confirme seu e-mail em Minha conta/)).toBeVisible()
+  await expect(create).toBeDisabled()
+
+  user.email_verified_at = '2026-11-22T10:00:00Z'
+  user.can_manage_animals = true
+  user.animal_management_block_reason = null
+  user.organization.verification_status = 'approved'
+  await page.goto('/login?verified=1', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await expect(create).toBeEnabled()
+
+  user.can_manage_animals = false
+  for (const [reason, message] of [
+    ['ngo_pending', /Sua ONG está em análise/i],
+    ['profile_suspended', /Seu perfil está suspenso/i],
+    ['profile_rejected', /Seu cadastro não foi aprovado/i],
+  ]) {
+    user.animal_management_block_reason = reason
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText(message)).toBeVisible()
+    await expect(create).toBeDisabled()
+  }
+})
 
 test('manual CEP fallback and server validation keep the form editable', async ({ page }) => {
   await mockApi(page, {

@@ -1,15 +1,25 @@
 <?php
 
 use App\Models\User;
+use App\Services\ProtectorActivation;
 use Illuminate\Auth\Events\Verified;
-use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/email/verify/{id}/{hash}', function (Request $request, string $id, string $hash) {
-    $user = User::findOrFail($id);
-    abort_unless(hash_equals(sha1($user->getEmailForVerification()), $hash), 403);
-    if (! $user->hasVerifiedEmail() && $user->markEmailAsVerified()) {
-        event(new Verified($user));
+Route::get('/email/verify/{id}/{hash}', function (string $id, string $hash, ProtectorActivation $activation) {
+    $verified = DB::connection('mongodb')->transaction(function () use ($id, $hash, $activation) {
+        $user = User::findOrFail($id);
+        abort_unless(hash_equals(sha1($user->getEmailForVerification()), $hash), 403);
+        $changed = ! $user->hasVerifiedEmail() && $user->markEmailAsVerified();
+        if ($changed && $user->organization) {
+            $activation->activate($user->organization, 'email_verification', $user);
+        }
+
+        return $changed ? $user : null;
+    }, 3);
+
+    if ($verified) {
+        event(new Verified($verified));
     }
 
     return redirect(rtrim(config('app.frontend_url'), '/').'/login?verified=1');

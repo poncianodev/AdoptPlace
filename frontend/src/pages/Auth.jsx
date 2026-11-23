@@ -13,15 +13,17 @@ export default function Auth() {
   const navigate = useNavigate()
   const location = useLocation()
   const verified = new URLSearchParams(location.search).get('verified') === '1'
-  const syncKey = verified && authUser ? `${authUser.id}:${Boolean(authUser.email_verified_at)}` : ''
+  const syncKey = verified && authUser ? authUser.id : ''
   const syncingVerifiedUser = Boolean(
-    verified && authUser && !authUser.email_verified_at && completedSyncKey !== syncKey
+    syncKey && completedSyncKey !== syncKey
   )
 
   useEffect(() => {
-    if (!verified) return undefined
-    notifyEmailVerified?.()
-    if (!authUser || authUser.email_verified_at) return undefined
+    if (verified) notifyEmailVerified?.()
+  }, [verified, notifyEmailVerified])
+
+  useEffect(() => {
+    if (!syncKey || completedSyncKey === syncKey) return undefined
     let active = true
     Promise.resolve(refreshUser?.()).finally(() => {
       if (active) setCompletedSyncKey(syncKey)
@@ -29,7 +31,7 @@ export default function Auth() {
     return () => {
       active = false
     }
-  }, [verified, authUser, refreshUser, notifyEmailVerified, syncKey])
+  }, [refreshUser, syncKey, completedSyncKey])
 
   async function submit(event) {
     event.preventDefault()

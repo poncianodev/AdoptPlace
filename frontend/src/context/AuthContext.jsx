@@ -84,9 +84,10 @@ export function AuthProvider({ children }) {
 
   const userId = user?.id
   const userVerifiedAt = user?.email_verified_at
+  const managementBlocked = user?.role === 'organization_owner' && user.can_manage_animals !== true
 
   useEffect(() => {
-    if (!userId || userVerifiedAt) return undefined
+    if (!userId || (userVerifiedAt && !managementBlocked)) return undefined
 
     const handlePassiveSync = () => {
       refreshUser({ force: false })
@@ -126,7 +127,7 @@ export function AuthProvider({ children }) {
       document.removeEventListener('visibilitychange', handleVisibility)
       channel?.close()
     }
-  }, [userId, userVerifiedAt, refreshUser])
+  }, [userId, userVerifiedAt, managementBlocked, refreshUser])
 
   const value = useMemo(() => ({
     user,

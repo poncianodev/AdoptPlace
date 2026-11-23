@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Enums\PetStatus;
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PetResource;
 use App\Models\AdoptionRequest;
 use App\Models\Pet;
+use App\Services\AnimalManagementAccess;
 use App\Services\AuditService;
+use App\Services\PetPublication;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
@@ -76,6 +79,14 @@ class PetController extends Controller
 
             $updates = ['status' => $targetStatus];
             if ($targetStatus === PetStatus::Published) {
+                $eligibleOwner = $currentPet->organization?->users()
+                    ->where('role', UserRole::OrganizationOwner->value)
+                    ->where('status', 'active')
+                    ->whereNotNull('email_verified_at')
+                    ->get()
+                    ->contains(fn ($owner) => AnimalManagementAccess::blockedReason($owner) === null);
+                abort_unless($eligibleOwner, 403, 'O perfil responsável precisa estar habilitado para publicar animais.');
+                $updates['cover_photo'] = PetPublication::validatedCover($currentPet);
                 $updates['published_at'] = $currentPet->published_at ?? now();
                 $updates['adopted_at'] = null;
             }

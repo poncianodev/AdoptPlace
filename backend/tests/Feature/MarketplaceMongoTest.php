@@ -187,6 +187,7 @@ class MarketplaceMongoTest extends TestCase
     {
         $org = Organization::create(['name' => 'Test NGO', 'slug' => 'test-ngo', 'type' => 'ngo', 'city' => 'São Paulo', 'state' => 'SP', 'verification_status' => 'approved']);
         $owner = User::create(['name' => 'Owner', 'email' => 'owner@example.test', 'password' => 'Amigo#12', 'role' => 'organization_owner', 'organization_id' => $org->id, 'status' => 'active']);
+        $owner->markEmailAsVerified();
         $adopter = User::create(['name' => 'Adopter', 'email' => 'adopter@example.test', 'password' => 'Amigo#12', 'role' => 'adopter', 'status' => 'active']);
         $other = User::create(['name' => 'Other', 'email' => 'other@example.test', 'password' => 'Amigo#12', 'role' => 'adopter', 'status' => 'active']);
         $admin = User::create(['name' => 'Admin', 'email' => 'admin@example.test', 'password' => 'Amigo#12', 'role' => 'admin', 'status' => 'active']);
@@ -513,6 +514,116 @@ class MarketplaceMongoTest extends TestCase
         $closedReq5 = AdoptionRequest::find($req5Id);
         $this->assertSame('rejected', $closedReq5->status->value);
         $this->assertSame('Animal adotado externamente fora da plataforma.', collect($closedReq5->status_history)->last()['reason']);
+    }
+
+    public function test_signed_email_verification_activates_only_pending_protectors_and_keeps_ngo_review(): void
+    {
+        $admin = new User(['role' => 'admin', 'status' => 'active']);
+        $admin->id = 'approval-test-admin';
+
+        foreach ([
+            ['independent_protector', null, 'approved'],
+            ['independent_protector', 'suspended', 'suspended'],
+            ['independent_protector', 'rejected', 'rejected'],
+            ['ngo', null, 'pending'],
+            ['ngo', 'approved', 'approved'],
+        ] as $index => [$type, $before, $after]) {
+            $this->travel(2)->minutes();
+            \Illuminate\Support\Facades\Auth::forgetGuards();
+            \Illuminate\Support\Facades\Auth::shouldUse('web');
+            $this->flushSession();
+            $email = "provider-{$index}@example.test";
+            $this->postJson('/api/v1/auth/register', [
+                'account_type' => $type, 'name' => "Responsável {$index}", 'email' => $email,
+                'phone' => '11999999999', 'password' => 'Encontro#123',
+                'password_confirmation' => 'Encontro#123', 'terms' => true,
+                'provider_name' => "Perfil {$index}", 'description' => 'Acolhemos animais e buscamos adoções responsáveis.',
+                'responsible_adoption' => true, 'has_cnpj' => false,
+                'address' => ['cep' => '01001000', 'street' => 'Rua Um', 'number' => '10', 'city' => 'São Paulo', 'state' => 'SP'],
+            ])->assertCreated()->assertJsonPath('data.organization.verification_status', 'pending')
+                ->assertJsonPath('data.can_manage_animals', false);
+            $owner = User::where('email', $email)->firstOrFail();
+            $profile = $owner->organization;
+            if ($before) {
+                $this->actingAs($admin)->patchJson("/api/v1/admin/organizations/{$profile->id}/status", ['status' => $before])->assertOk();
+            }
+            $this->actingAs($owner)->postJson('/api/v1/organization/pets', ['name' => 'Luna'])->assertForbidden();
+            $existingDraft = Pet::create([
+                'name' => 'Rascunho existente', 'slug' => "approval-test-{$index}",
+                'organization_id' => $profile->id, 'status' => 'draft',
+            ]);
+            $this->actingAs($admin)->patchJson("/api/v1/admin/pets/{$existingDraft->id}/status", ['status' => 'published'])->assertForbidden();
+            $link = \Illuminate\Support\Facades\URL::temporarySignedRoute('verification.verify', now()->addMinutes(60), [
+                'id' => $owner->id, 'hash' => sha1($email),
+            ]);
+            $this->get(strtok($link, '?'))->assertForbidden();
+            $this->get($link)->assertRedirect();
+            $this->get($link)->assertRedirect();
+            $this->assertSame($after, $profile->fresh()->verification_status->value);
+            $this->assertTrue($owner->fresh()->hasVerifiedEmail());
+            if ($type === 'ngo' && ! $before) {
+                $this->actingAs($owner->fresh())->postJson('/api/v1/organization/pets', ['name' => 'Luna'])->assertForbidden();
+                $this->actingAs($admin)->patchJson("/api/v1/admin/organizations/{$profile->id}/status", ['status' => 'approved'])->assertOk();
+            }
+
+            $draft = $this->actingAs($owner->fresh())->postJson('/api/v1/organization/pets', [
+                'name' => 'Luna', 'description' => 'Uma cachorrinha que espera uma família responsável.',
+                'location' => ['city' => 'São Paulo', 'state' => 'SP'],
+            ]);
+            if (in_array($after, ['suspended', 'rejected'], true)) {
+                $draft->assertForbidden();
+            } else {
+                $petId = $draft->assertCreated()->json('data.id');
+                Pet::findOrFail($petId)->update(['cover_photo' => '/demo-pets/luna.png']);
+                $this->postJson("/api/v1/organization/pets/{$petId}/publish")
+                    ->assertOk()->assertJsonPath('data.status', 'published');
+            }
+        }
+
+        $this->assertSame(1, \App\Models\AuditLog::where('action', 'organization.protector_auto_activated')->count());
+    }
+
+    public function test_legacy_protector_activation_requires_a_single_verified_owner_and_explicit_apply(): void
+    {
+        $profiles = [];
+        foreach ([
+            ['independent_protector', 'pending', 1, true],
+            ['independent_protector', 'pending', 2, true],
+            ['independent_protector', 'pending', 1, false],
+            ['independent_protector', 'suspended', 1, true],
+            ['independent_protector', 'rejected', 1, true],
+            ['ngo', 'pending', 1, true],
+        ] as $index => [$type, $status, $owners, $verified]) {
+            $profile = Organization::create([
+                'type' => $type, 'verification_status' => $status, 'slug' => "legacy-{$index}",
+            ]);
+            $profiles[] = $profile;
+            for ($member = 0; $member < $owners; $member++) {
+                $owner = User::create([
+                    'name' => 'Responsável', 'email' => "legacy-{$index}-{$member}@example.test",
+                    'role' => 'organization_owner', 'status' => 'active', 'organization_id' => $profile->id,
+                ]);
+                if ($verified) {
+                    $owner->markEmailAsVerified();
+                }
+            }
+        }
+
+        $command = 'protectors:activate-verified';
+        $database = ['--database' => config('database.connections.mongodb.database')];
+        $this->artisan($command, $database)->expectsOutput((string) $profiles[0]->id)
+            ->expectsOutput('Perfis elegíveis: 1')->assertSuccessful();
+        $this->assertSame('pending', $profiles[0]->fresh()->verification_status->value);
+        $this->artisan($command, $database + ['--apply' => true])->assertFailed();
+        foreach (array_slice($profiles, 1) as $profile) {
+            $this->artisan($command, $database + ['--apply' => true, '--profile' => (string) $profile->id])->assertFailed();
+            $this->assertSame($profile->verification_status, $profile->fresh()->verification_status);
+        }
+        $selected = $database + ['--apply' => true, '--profile' => (string) $profiles[0]->id];
+        $this->artisan($command, $selected)->assertSuccessful();
+        $this->artisan($command, $selected)->assertFailed();
+        $this->assertSame('approved', $profiles[0]->fresh()->verification_status->value);
+        $this->assertSame(1, \App\Models\AuditLog::where('action', 'organization.protector_auto_activated')->count());
     }
 
     public function test_organization_pet_management_drafts_editing_photos_publishing_and_permissions(): void

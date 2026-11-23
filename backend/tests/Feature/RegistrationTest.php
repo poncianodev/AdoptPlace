@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\UserRole;
 use App\Http\Requests\Auth\RegisterRequest;
+use App\Http\Resources\UserResource;
 use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Support\Facades\Validator;
@@ -78,6 +79,41 @@ class RegistrationTest extends TestCase
         $user->setRelation('organization', null);
         $this->actingAs($user, 'web')->getJson('/api/v1/organization')->assertForbidden();
         $this->postJson('/api/v1/organization/pets', [])->assertForbidden();
+    }
+
+    public function test_provider_management_enforces_role_type_email_and_approval(): void
+    {
+        $cases = [
+            ['ngo', 'pending', true, 'ngo_pending'],
+            ['ngo', 'approved', false, 'email_unverified'],
+            ['ngo', 'approved', true, null],
+            ['independent_protector', 'pending', false, 'email_unverified'],
+            ['independent_protector', 'pending', true, 'protector_pending'],
+            ['independent_protector', 'approved', true, null],
+            ['independent_protector', 'suspended', true, 'profile_suspended'],
+            ['independent_protector', 'rejected', true, 'profile_rejected'],
+            ['unknown', 'approved', true, 'profile_unavailable'],
+        ];
+
+        foreach ($cases as [$type, $status, $verified, $reason]) {
+            $organization = new Organization(['type' => $type, 'verification_status' => $status]);
+            $organization->id = 'profile-one';
+            $user = new User(['role' => UserRole::OrganizationOwner, 'status' => 'active', 'organization_id' => 'profile-one']);
+            $user->id = 'provider-one';
+            $user->email_verified_at = $verified ? now() : null;
+            $user->setRelation('organization', $organization);
+
+            $this->actingAs($user, 'sanctum');
+            $resource = (new UserResource($user))->resolve();
+            $this->assertSame($reason === null, $resource['can_manage_animals']);
+            $this->assertSame($reason, $resource['animal_management_block_reason']);
+            $response = $this->postJson('/api/v1/organization/pets', []);
+            if ($reason === null) {
+                $response->assertUnprocessable()->assertJsonValidationErrors('name');
+            } else {
+                $response->assertForbidden()->assertJsonPath('reason', $reason);
+            }
+        }
     }
 
     public function test_private_addresses_are_encrypted_and_not_serialized(): void

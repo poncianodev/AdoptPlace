@@ -13,6 +13,7 @@ const ngoUser = {
   name: 'Clara ONG',
   email: 'clara@amigospf.test',
   role: 'organization_owner',
+  can_manage_animals: true,
   email_verified_at: '2026-11-01T10:00:00Z',
   organization: {
     id: 'o-1',
