@@ -15,14 +15,16 @@ use App\Http\Controllers\Api\V1\PublicPetController;
 use App\Http\Controllers\Api\V1\ReviewController;
 use App\Http\Middleware\EnsureCurrentSession;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 Route::get('/health', fn () => response()->json([
     'status' => 'ok',
     'service' => 'adoptplace-api',
 ]))->withoutMiddleware([
     'throttle:api',
-    \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+    EnsureFrontendRequestsAreStateful::class,
 ]);
 
 Route::prefix('v1')->group(function () {
@@ -58,8 +60,8 @@ Route::prefix('v1')->group(function () {
 
             try {
                 $request->user()->sendEmailVerificationNotification();
-            } catch (\Throwable $e) {
-                report($e);
+            } catch (Throwable) {
+                Log::warning('Verification email resend failed');
 
                 return response()->json([
                     'message' => 'Não foi possível enviar o e-mail de confirmação no momento. Tente novamente em instantes.',

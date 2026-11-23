@@ -12,7 +12,10 @@ class AdoptionRequestReceived extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public AdoptionRequest $adoptionRequest) {}
+    public function __construct(public AdoptionRequest $adoptionRequest)
+    {
+        $this->locale('pt_BR');
+    }
 
     public function via(object $notifiable): array
     {
@@ -21,11 +24,15 @@ class AdoptionRequestReceived extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
-            ->subject('Novo interesse de adoção no AdoptPlace')
-            ->greeting('Olá, '.$notifiable->name.'!')
-            ->line('Uma pessoa demonstrou interesse em adotar '.$this->adoptionRequest->pet?->name.'.')
-            ->line('Acesse o portal da sua organização para revisar o pedido com segurança.')
-            ->action('Abrir portal', rtrim(config('app.frontend_url'), '/').'/dashboard');
+        $petName = $this->adoptionRequest->pet?->name;
+
+        return TransactionalMail::make(
+            subject: 'Novo interesse de adoção no AdoptPlace',
+            title: 'Novo interesse de adoção',
+            intro: $petName ? 'Uma pessoa demonstrou interesse em adotar '.$petName.'.' : 'Você recebeu um novo interesse de adoção.',
+            action: 'Abrir portal',
+            url: rtrim(config('app.frontend_url'), '/').'/dashboard',
+            notes: ['Acesse o painel para revisar o pedido e acompanhar a adoção.'],
+        );
     }
 }

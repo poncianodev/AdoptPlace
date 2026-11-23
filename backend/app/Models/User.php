@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Casts\BsonArray;
 use App\Enums\UserRole;
+use App\Notifications\ResetAccountPassword;
+use App\Notifications\VerifyAccountEmail;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Notifications\Notifiable;
@@ -71,6 +73,16 @@ class User extends Authenticatable implements MustVerifyEmail
     public function organization()
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    public function sendEmailVerificationNotification(): void
+    {
+        $this->notify((new VerifyAccountEmail)->locale('pt_BR'));
+    }
+
+    public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
+    {
+        $this->notify((new ResetAccountPassword($token))->locale('pt_BR'));
     }
 
     public function isAdmin(): bool

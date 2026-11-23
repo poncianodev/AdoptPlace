@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { defaultPathForUser, useAuth } from '../context/AuthContext'
 import UserMenu from './UserMenu'
-import logo from '../assets/adoptplace-logo.png'
 
 const AUTHENTICATED_NAV_ITEMS = [
   { to: '/animais', label: 'Animais' },
@@ -19,7 +18,7 @@ function brandDestinationForUser(user) {
 export function Brand({ to = '/', ariaLabel = 'AdoptPlace, início' }) {
   return (
     <Link to={to} className="brand" aria-label={ariaLabel}>
-      <img src={logo} alt="" />
+      <img src="/brand/adoptplace-logo.png" alt="" />
       <span>
         adopt<span>place</span>
         <small>ENCONTROS QUE TRANSFORMAM</small>
