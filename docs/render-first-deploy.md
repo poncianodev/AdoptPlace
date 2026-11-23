@@ -53,7 +53,20 @@ Fornecer privadamente APP_KEY, DB_URI, DB_DATABASE e CLOUDINARY_CLOUD_NAME/API_K
 
 APP_KEY deve permanecer estável: reutilizar a chave correspondente caso o banco autorizado contenha dados criptografados existentes. Banco novo pode ter chave própria, preparada privadamente, nunca regenerada no deploy. Não usar a chave pública de fixtures do PHPUnit. Alterar hostname/cookies/chave pode exigir novo login e invalidar links antigos.
 
-MAIL_MAILER=array permite um primeiro smoke test sem envio nem conteúdo de e-mail nos logs; não é solução de entrega. No gratuito, portas SMTP 25/465/587 são bloqueadas. Publicação de animais exige e-mail confirmado e recuperação depende de entrega real: homologação completa precisa de transporte compatível. Não presumir que selecionar um mailer HTTPS funciona sem conferir dependências e configurar o respectivo provedor. Não contornar confirmação de e-mail.
+### E-mails transacionais via Resend
+
+Após disponibilizar no Render a versão com `resend/resend-php`, configure as variáveis abaixo em **Environment**. O transporte nativo do Laravel usa a API HTTPS do Resend. As portas SMTP 25, 465 e 587 são bloqueadas no Render Free.
+
+| Variável | Valor |
+| --- | --- |
+| `MAIL_MAILER` | `resend` |
+| `MAIL_FROM_ADDRESS` | `no-reply@adoptplace.me` |
+| `MAIL_FROM_NAME` | `AdoptPlace` |
+| `RESEND_KEY` | Chave inserida somente no Render, com permissão de envio restrita ao domínio verificado `adoptplace.me` |
+
+Mantenha `APP_URL` e `FRONTEND_URL` apontando para a origem pública HTTPS da aplicação. O domínio do remetente é independente do host do site. Preserve `APP_KEY` e `PASSWORD_RESET_STORE=mongodb_passwords`. O entrypoint recria o cache de configuração na inicialização. O ambiente local continua usando Mailpit, e os testes usam transporte em memória ou notificações simuladas.
+
+Após a ativação autorizada, use uma conta controlada para solicitar a recuperação, confirmar a entrega, abrir o link, trocar a senha e entrar novamente. Depois teste o reenvio da confirmação e abra o link assinado para verificar se a conta foi confirmada. A resposta da recuperação é genérica mesmo quando o envio falha, por isso confirme a entrega no painel do Resend e na caixa de entrada. Não copie links ou tokens para registros de homologação. `MAIL_MAILER=array` fica reservado para validações sem entrega.
 
 ## Limitações e verificações após publicação autorizada
 
