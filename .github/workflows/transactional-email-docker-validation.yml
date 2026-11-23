@@ -1,0 +1,92 @@
+name: Transactional email Docker validation
+
+on:
+  push:
+    branches: [validation/transactional-email-docker]
+
+permissions:
+  contents: read
+
+jobs:
+  docker-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build the Render image
+        run: docker build --tag adoptplace-email-validation --file Dockerfile .
+
+      - name: Start Apache without external network access
+        shell: bash
+        run: |
+          docker run --detach --name adoptplace-email-smoke --network none \
+            --env PORT=10000 \
+            --env APP_KEY="base64:$(openssl rand -base64 32)" \
+            --env APP_URL=https://adoptplace.example.test \
+            --env FRONTEND_URL=https://adoptplace.example.test \
+            --env DB_URI='mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=250' \
+            --env DB_DATABASE=adoptplace_docker_validation \
+            --env SESSION_DRIVER=array --env CACHE_STORE=array --env MAIL_MAILER=array \
+            adoptplace-email-validation
+
+          for attempt in {1..30}; do
+            if docker exec adoptplace-email-smoke php -r 'exit(@file_get_contents("http://127.0.0.1:10000/api/health") === false ? 1 : 0);'; then
+              docker exec adoptplace-email-smoke apache2ctl -t
+              exit 0
+            fi
+            if [ "$(docker inspect --format '{{.State.Running}}' adoptplace-email-smoke)" != true ]; then
+              break
+            fi
+            sleep 1
+          done
+          docker logs adoptplace-email-smoke
+          exit 1
+
+      - name: Verify health, logo and log redaction
+        shell: bash
+        run: |
+          docker exec -i adoptplace-email-smoke php <<'PHP'
+          <?php
+          function request(string $path, array $headers = []): array
+          {
+              $curl = curl_init('http://127.0.0.1:10000'.$path);
+              curl_setopt_array($curl, [
+                  CURLOPT_RETURNTRANSFER => true,
+                  CURLOPT_TIMEOUT => 5,
+                  CURLOPT_HTTPHEADER => $headers,
+              ]);
+              $body = curl_exec($curl);
+              return [curl_getinfo($curl, CURLINFO_RESPONSE_CODE), curl_getinfo($curl, CURLINFO_CONTENT_TYPE), $body];
+          }
+
+          [$healthStatus, , $healthBody] = request('/api/health');
+          [$logoStatus, $logoType, $logo] = request('/brand/adoptplace-logo.png');
+          [$resetStatus] = request('/redefinir-senha?token=adoptplace-smoke-token-marker');
+          [$verifyStatus] = request('/email/verify/smoke/fixture?signature=adoptplace-smoke-signature-marker');
+          [$refererStatus] = request('/brand/adoptplace-logo.png', ['Referer: https://example.test/?secret=adoptplace-smoke-referer-marker']);
+
+          if ($healthStatus !== 200 || (json_decode($healthBody, true)['status'] ?? null) !== 'ok'
+              || $logoStatus !== 200 || $logoType !== 'image/png' || ! str_starts_with($logo, "\x89PNG\r\n\x1a\n")
+              || $resetStatus !== 200 || $verifyStatus !== 403 || $refererStatus !== 200) {
+              fwrite(STDERR, "Unexpected HTTP results: health=$healthStatus logo=$logoStatus/$logoType reset=$resetStatus verify=$verifyStatus referer=$refererStatus\n");
+              exit(1);
+          }
+          echo "Health, PNG and fixture requests passed.\n";
+          PHP
+
+          docker logs adoptplace-email-smoke > apache-smoke.log 2>&1
+          grep -F 'GET /redefinir-senha HTTP/' apache-smoke.log
+          grep -F 'GET /email/verify/smoke/fixture HTTP/' apache-smoke.log
+          test "$(grep -Fc 'GET /brand/adoptplace-logo.png HTTP/' apache-smoke.log)" -eq 2
+          if grep -Eq 'adoptplace-smoke-(token|signature|referer)-marker' apache-smoke.log; then
+            echo 'Fictitious sensitive values appeared in the Apache logs.'
+            exit 1
+          fi
+          echo 'Access logs omit query strings and Referer.'
+
+      - name: Remove the smoke test container
+        if: always()
+        run: docker rm --force adoptplace-email-smoke || true
